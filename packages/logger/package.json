@@ -1,0 +1,17 @@
+{
+  "name": "@smart-recipe/logger",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "@types/winston": "^2.4.4"
+  }
+} 

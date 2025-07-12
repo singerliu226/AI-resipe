@@ -1,0 +1,31 @@
+{
+  "name": "smart-recipe-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "packageManager": "pnpm@8.15.4",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --parallel --filter web dev & pnpm --filter api start",
+    "dev:web": "pnpm -F web dev",
+    "dev:api": "pnpm --filter api start",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "llm:review": "node scripts/llm_review.js",
+    "conv:upload": "node scripts/conv_logger.js",
+    "prisma:migrate": "prisma migrate dev --name init --schema=prisma/schema.prisma",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma"
+  },
+  "devDependencies": {
+     "@types/node": "^20.11.19",
+     "@types/winston": "^2.4.4",
+     "prisma": "^5.13.0"
+   },
+  "dependencies": {
+     "@supabase/supabase-js": "^2.39.7",
+     "@prisma/client": "^5.13.0"
+  }
+} 

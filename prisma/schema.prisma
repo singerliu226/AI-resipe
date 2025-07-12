@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String    @id @default(uuid()) @db.Uuid
+  email      String    @unique
+  createdAt  DateTime  @default(now())
+  profile    Profile?
+  feedback   Feedback[]
+}
+
+model Profile {
+  id            String   @id @default(uuid()) @db.Uuid
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String   @unique @db.Uuid
+  sex           String
+  age           Int
+  weight        Float
+  height        Float
+  activityLevel Float
+}
+
+model Recipe {
+  id          Int          @id @default(autoincrement())
+  name        String
+  calories    Float
+  macroPro    Float
+  macroFat    Float
+  macroCarb   Float
+  cuisine     String?
+  ingredients RecipeIngredient[]
+  feedback    Feedback[]
+}
+
+model Ingredient {
+  id          Int                 @id @default(autoincrement())
+  name        String              @unique
+  seasonality String?
+  recipes     RecipeIngredient[]
+}
+
+model RecipeIngredient {
+  recipe     Recipe     @relation(fields: [recipeId], references: [id])
+  recipeId   Int
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId Int
+  quantity   Float
+
+  @@id([recipeId, ingredientId])
+}
+
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @db.Uuid
+  recipe    Recipe   @relation(fields: [recipeId], references: [id])
+  recipeId  Int
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+} 

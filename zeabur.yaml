@@ -17,7 +17,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     ports:
-      - 8000
+      - 8080
     envs:
       - name: OPENAI_API_KEY
         value: ${OPENAI_API_KEY}

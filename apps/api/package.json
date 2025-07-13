@@ -1,8 +1,0 @@
-{
-  "name": "smart-recipe-api",
-  "private": true,
-  "version": "0.0.1",
-  "scripts": {
-    "start": "python3 -m uvicorn apps.api.main:app --port 8000 --reload"
-  }
-} 

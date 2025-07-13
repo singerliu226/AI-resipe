@@ -1,0 +1,38 @@
+# Zeabur 部署配置
+# 参考文档: https://docs.zeabur.com
+# 本配置定义两项服务: api (FastAPI) 与 web (Next.js)
+
+version: "1.0"
+
+name: smart-recipe
+
+envs:
+  OPENAI_API_KEY: ${OPENAI_API_KEY}
+  OPENAI_API_BASE: ${OPENAI_API_BASE}
+  DATABASE_URL: ${DATABASE_URL}
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - 8000
+    envs:
+      - name: OPENAI_API_KEY
+        value: ${OPENAI_API_KEY}
+      - name: OPENAI_API_BASE
+        value: ${OPENAI_API_BASE}
+      - name: DATABASE_URL
+        value: ${DATABASE_URL}
+    healthcheck:
+      path: /api/v1/health
+      interval: 30s
+  web:
+    build:
+      context: apps/web
+    envs:
+      - name: NEXT_PUBLIC_API_BASE_URL
+        value: ${ZEABUR_SERVICE_API_HOST}
+    ports:
+      - 3000 

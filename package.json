@@ -17,12 +17,16 @@
     "llm:review": "node scripts/llm_review.js",
     "conv:upload": "node scripts/conv_logger.js",
     "prisma:migrate": "prisma migrate dev --name init --schema=prisma/schema.prisma",
-    "prisma:generate": "prisma generate --schema=prisma/schema.prisma"
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
+    "import:foods": "ts-node --esm scripts/import_foods.ts"
   },
   "devDependencies": {
      "@types/node": "^20.11.19",
      "@types/winston": "^2.4.4",
-     "prisma": "^5.13.0"
+     "prisma": "^5.13.0",
+     "typescript": "^5.4.2",
+     "csv-parse": "^5.5.0",
+     "ts-node": "^10.9.2"
    },
   "dependencies": {
      "@supabase/supabase-js": "^2.39.7",

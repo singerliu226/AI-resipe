@@ -1,72 +1,117 @@
-# 智能食谱 Demo Monorepo
+# 智能食谱 MVP
 
-> Next.js + Supabase + FastAPI(DsPy) 全栈示例，实现个性化食谱推荐。
+基于营养数据和用户偏好的智能食谱推荐系统。
 
-## 目录结构
-```
-智能食谱/
-├─ apps/
-│  ├─ web/        # Next.js 14 (App Router)
-│  └─ api/        # FastAPI + DsPy 服务
-├─ packages/
-│  └─ logger/     # Winston 通用日志模块
-├─ prisma/        # 数据模型与迁移
-├─ scripts/       # 自动化脚本
-└─ .github/       # CI / LLM 预审
-```
+## 项目架构
+
+- **Backend**: FastAPI + SQLAlchemy + PostgreSQL
+- **Frontend**: Next.js + React
+- **Database**: PostgreSQL (Docker)
+- **AI**: DSPy + DeepSeek API
 
 ## 快速开始
+
+### 1. 环境准备
+
 ```bash
-pnpm install          # 安装前端 / node 依赖
-pip install -r apps/api/requirements.txt   # 安装后端依赖
+# 安装依赖
+pnpm install
 
-# 配置环境变量
-cp apps/api/env.local .env                 # DeepSeek/OpenAI Key
-export DATABASE_URL="postgresql://user:pass@host/db"  # 本地数据库
-
-# 生成 Prisma Client & 迁移
-pnpm prisma:migrate
-pnpm prisma:generate
-
-# 并行启动
-pnpm dev            # 前端 3000 + 后端 8000
+# 启动PostgreSQL数据库
+docker start smart-recipe-postgres
 ```
 
-## 主要脚本
-| 命令 | 说明 |
-| ---- | ---- |
-| `pnpm dev` | 并行启动 web 与 api 热更新 |
-| `pnpm dev:web` / `pnpm dev:api` | 单独启动子项目 |
-| `pnpm prisma:migrate` | 本地迁移数据库 |
-| `pnpm conv:upload` | 上传 .cursor_history 至 Supabase Storage |
-| `pnpm llm:review` | 本地运行 LLM 预审脚本 |
+### 2. 启动开发环境
 
-## 环境变量
-### 通用
-| 名称 | 说明 |
-| ---- | ---- |
-| `NEXT_PUBLIC_API_BASE_URL` | 前端调用后端地址，默认 `http://localhost:8000` |
+**方式一：使用启动脚本（推荐）**
+```bash
+./scripts/start-dev.sh
+```
 
-### Backend `apps/api`
-| 名称 | 说明 |
-| ---- | ---- |
-| `OPENAI_API_KEY` | DeepSeek／OpenAI 兼容 Key |
-| `OPENAI_API_BASE` | DeepSeek 网关，如 `https://api.deepseek.com/v1` |
-| `DATABASE_URL` | PostgreSQL 连接串 |
+**方式二：使用Makefile**
+```bash
+# 测试数据库连接
+make test-db
 
-### Supabase Conversation Logger
-| 名称 | 说明 |
-| ---- | ---- |
-| `SUPABASE_URL` | Supabase 项目 URL |
-| `SUPABASE_SERVICE_KEY` | service_role Key，用于上传对话日志 |
+# 启动API服务器
+make dev-api
 
-## GitHub Actions
-`.github/workflows/llm_review.yml` 在 PR 打开/更新时自动运行 LLM 代码评审，需在仓库 Secrets 设置 `OPENAI_API_KEY`。
+# 健康检查
+make health-check
+```
 
-## 部署
-1. **前端**：Vercel → 设置 `NEXT_PUBLIC_API_BASE_URL` 指向后端。
-2. **后端**：Railway / Fly.io 部署 FastAPI，配置 `OPENAI_API_KEY`、`DATABASE_URL`。
-3. **数据库**：Supabase Postgres 或自建 Postgres。
+**方式三：手动启动**
+```bash
+# 在项目根目录执行
+uvicorn main:app --app-dir apps/api --reload --host 0.0.0.0 --port 8000
+```
 
----
-© 2025 Smart Recipe Demo 
+### 3. 验证服务
+
+- API健康检查: http://localhost:8000/api/v1/health
+- 食材列表: http://localhost:8000/api/v1/ingredients
+- API文档: http://localhost:8000/docs
+
+## 问题解决方案
+
+### 常见问题及解决方案
+
+1. **"Could not import module 'main'"**
+   - 原因：在错误目录执行uvicorn命令
+   - 解决：使用 `uvicorn main:app --app-dir apps/api` 或在项目根目录使用完整路径
+
+2. **"DATABASE_URL environment variable is required"**
+   - 原因：环境变量未正确加载
+   - 解决：确保 `apps/api/env.local` 包含正确的数据库连接字符串
+
+3. **数据库连接失败**
+   - 原因：Docker容器未启动或密码错误
+   - 解决：检查容器状态，确认连接参数
+
+4. **Prisma Studio报错**
+   - 原因：项目已迁移到SQLAlchemy
+   - 解决：忽略此错误或使用PostgreSQL客户端工具
+
+### 技术栈迁移记录
+
+- ✅ **Prisma** → **SQLAlchemy**: 解决Python 3.13兼容性问题
+- ✅ **asyncpg** → **psycopg3**: 解决编译错误
+- ✅ 数据库连接: PostgreSQL运行在端口5433，避免冲突
+
+## 数据状态
+
+- ✅ 食材数据：1438条记录已导入
+- ✅ 营养信息：完整的热量、蛋白质、脂肪、碳水等数据
+- ✅ API接口：食材列表、搜索、详情等功能正常
+
+## 开发命令
+
+```bash
+# 数据库相关
+make test-db                 # 测试数据库连接
+docker start smart-recipe-postgres  # 启动数据库
+
+# API服务
+make dev-api                 # 开发模式启动
+make start-api               # 生产模式启动
+make health-check           # 健康检查
+make clean                  # 清理进程
+
+# 开发脚本
+./scripts/start-dev.sh      # 一键启动开发环境
+python scripts/test-db.py   # 测试数据库连接
+```
+
+## 项目状态
+
+- ✅ 数据层：食材数据已完整导入
+- ✅ API层：核心接口开发完成并测试通过
+- 🔄 推荐算法：待开发
+- 🔄 前端UI：待开发
+- 🔄 部署配置：待配置
+
+## 贡献指南
+
+1. 确保所有测试通过
+2. 遵循代码规范和注释要求
+3. 更新相关文档 

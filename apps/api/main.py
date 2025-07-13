@@ -20,6 +20,20 @@ import dspy  # type: ignore
 from dspy import LM  # type: ignore
 from dotenv import load_dotenv
 
+import csv
+from pathlib import Path
+from contextlib import asynccontextmanager
+from fastapi.middleware.cors import CORSMiddleware
+
+# 导入新的模块
+from database import close_db
+from routes_simple import router as api_router
+from routes_recommend import router as recommend_router
+from routes_rating import router as rating_router
+from routes_recipes import router as recipes_router
+# 初始化表
+from database import init_models
+
 # 优先读取同目录下 env.local，其次读取默认 .env
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "env.local"), override=False)
 load_dotenv(override=False)
@@ -98,9 +112,35 @@ class ExplainModule(dspy.Module):
 explain_module = ExplainModule()
 
 # -----------------------
+# FastAPI 生命周期管理
+# -----------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理：启动时连接数据库，关闭时断开连接"""
+    # 启动时初始化数据库表
+    await init_models()
+    yield
+    # 关闭时断开数据库连接
+    await close_db()
+
+# -----------------------
 # FastAPI definition
 # -----------------------
-app = FastAPI(title="Smart Recipe DsPy Service", version="0.1.0")
+app = FastAPI(
+    title="智能食谱 API 服务", 
+    version="0.1.0",
+    description="提供食材、菜谱查询和 AI 推荐解释功能",
+    lifespan=lifespan
+)
+
+# 允许本地前端跨域
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 
 class Recipe(BaseModel):
@@ -128,4 +168,27 @@ async def explain(req: ExplainRequest):
         result = explain_module(user_profile=user_str, recipes=recipe_str)
         return {"explanation": result}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) 
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
+RECIPES_CSV = DATA_DIR / "recipes.csv"
+
+# 预加载 CSV 以加速响应；若文件不存在则返回空列表。
+if RECIPES_CSV.exists():
+    with RECIPES_CSV.open(newline="", encoding="utf-8") as f:
+        _recipes_cache = list(csv.DictReader(f))
+else:
+    _recipes_cache: list[dict] = []
+
+
+# 注册 API 路由
+app.include_router(api_router, prefix="/api/v1", tags=["食材和菜谱"])
+app.include_router(recommend_router, prefix="/api/v1", tags=["推荐"])
+app.include_router(rating_router, prefix="/api/v1", tags=["评分"])
+app.include_router(recipes_router, prefix="/api/v1", tags=["菜谱"])
+
+@app.get("/recipes")
+async def get_recipes():
+    """返回 CSV 中的全部菜谱数据。（兼容性接口）"""
+    return _recipes_cache 

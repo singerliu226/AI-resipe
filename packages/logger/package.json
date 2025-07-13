@@ -5,13 +5,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "prepare": "pnpm run build"
   },
   "dependencies": {
-    "winston": "^3.13.0"
+    "winston": "^3.13.0",
+    "typescript": "^5.4.2"
   },
+  "type": "module",
   "devDependencies": {
-    "@types/node": "^20.11.19",
-    "@types/winston": "^2.4.4"
+    "@types/node": "^20.11.19"
   }
 } 

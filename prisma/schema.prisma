@@ -41,6 +41,14 @@ model Recipe {
 model Ingredient {
   id          Int                 @id @default(autoincrement())
   name        String              @unique
+  // 每 100g 食材营养信息
+  energyKcal  Float?
+  proteinG    Float?
+  fatG        Float?
+  carbG       Float?
+  fiberG      Float?
+  calciumMg   Float?
+  sodiumMg    Float?
   seasonality String?
   recipes     RecipeIngredient[]
 }

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { api } from "@/utils/api";
 import RecipeCard from "@/components/RecipeCard";
+import Link from "next/link";
 
 interface HomeData {
   ingredients: Awaited<ReturnType<typeof api.getIngredients>>;
@@ -40,18 +41,19 @@ export default async function Home() {
           根据你的营养目标与口味偏好，智能推荐最合适的三餐搭配。
         </p>
         <div className="flex justify-center gap-4 pt-4">
-          <a
+          {/* 使用 Next.js Link 进行客户端导航，避免 ESLint 报错 */}
+          <Link
             href="/recipes"
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
           >
             浏览菜谱
-          </a>
-          <a
+          </Link>
+          <Link
             href="/ingredients"
             className="bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition"
           >
             查找食材
-          </a>
+          </Link>
         </div>
       </section>
 

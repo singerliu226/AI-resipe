@@ -36,5 +36,9 @@ services:
         value: ${ZEABUR_SERVICE_API_HOST}
       - name: NEXT_DISABLE_ESLINT
         value: "1"
+      - name: NEXT_PUBLIC_SUPABASE_URL
+        value: ${NEXT_PUBLIC_SUPABASE_URL}
+      - name: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        value: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     ports:
       - 3000 

@@ -32,6 +32,17 @@ function getSupabaseClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
   if (!supabaseUrl || !supabaseAnonKey) {
+    // 浏览器环境缺少配置时，返回空实现并告警，避免崩溃
+    if (typeof window !== 'undefined') {
+      console.error('Missing Supabase environment variables, using mock client');
+      const mockClient = new Proxy({}, {
+        get() {
+          return () => Promise.resolve({});
+        }
+      }) as ReturnType<typeof createClient>;
+      supabaseInstance = mockClient;
+      return mockClient;
+    }
     throw new Error('Missing Supabase environment variables');
   }
   

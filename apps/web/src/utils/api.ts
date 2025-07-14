@@ -91,8 +91,19 @@ const DEFAULT_TIMEOUT = 10_000;
 
 /** 解析 API Base URL，优先运行时 env，其次编译时 */
 function getApiBaseUrl(): string {
-  // NEXT_PUBLIC_API_BASE_URL 可在 .env.local 注入
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  // 多个可能的环境变量
+  const baseEnv =
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.ZEABUR_SERVICE_API_HOST ||
+    process.env.API_BASE_URL;
+
+  let base = baseEnv || "http://localhost:8000";
+
+  // 如果只给了 host:port 或 service 名称，没有协议，默认加 http://
+  if (!/^https?:\/\//.test(base)) {
+    base = `http://${base}`;
+  }
+
   return base.replace(/\/$/, ""); // 移除尾部斜杠
 }
 

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import Image from "next/image";
 import { api } from "@/utils/api";
 import RecipeCard from "@/components/RecipeCard";

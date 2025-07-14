@@ -18,12 +18,8 @@ function getSupabaseClient() {
   
   // 构建时不创建真实的客户端，避免构建失败
   if (typeof window === 'undefined') {
-    // 构建时返回一个空的代理对象
-    const mockClient = new Proxy({}, {
-      get() {
-        return () => Promise.resolve({});
-      }
-    }) as ReturnType<typeof createClient>;
+    // 构建时返回深层 Mock
+    const mockClient = createDeepMock() as ReturnType<typeof createClient>;
     supabaseInstance = mockClient;
     return mockClient;
   }
@@ -35,11 +31,7 @@ function getSupabaseClient() {
     // 浏览器环境缺少配置时，返回空实现并告警，避免崩溃
     if (typeof window !== 'undefined') {
       console.error('Missing Supabase environment variables, using mock client');
-      const mockClient = new Proxy({}, {
-        get() {
-          return () => Promise.resolve({});
-        }
-      }) as ReturnType<typeof createClient>;
+      const mockClient = createDeepMock() as ReturnType<typeof createClient>;
       supabaseInstance = mockClient;
       return mockClient;
     }
@@ -48,6 +40,15 @@ function getSupabaseClient() {
   
   supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
   return supabaseInstance;
+}
+
+// 创建一个可无限链式调用的深层 Mock，用于缺少 Supabase 配置时避免前端崩溃
+function createDeepMock(): any {
+  const handler: ProxyHandler<any> = {
+    get: () => createDeepMock(),
+    apply: () => Promise.resolve({}),
+  };
+  return new Proxy(() => Promise.resolve({}), handler);
 }
 
 // 创建一个代理对象，保持原有的使用方式

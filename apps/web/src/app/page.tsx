@@ -11,24 +11,38 @@ interface HomeData {
 }
 
 async function fetchHomeData(): Promise<HomeData> {
-  const [ingredients, recommend] = await Promise.all([
-    api.getIngredients({ page_size: 8, has_nutrition: true }),
-    (async () => {
-      try {
-        return await api.recommend({
-          daily_calories: 2000,
-          macro_pro: 120,
-          macro_fat: 60,
-          macro_carb: 250,
-          taste_tags: [],
-        });
-      } catch {
-        return null;
-      }
-    })(),
-  ]);
+  try {
+    const [ingredients, recommend] = await Promise.all([
+      api.getIngredients({ page_size: 8, has_nutrition: true }),
+      (async () => {
+        try {
+          return await api.recommend({
+            daily_calories: 2000,
+            macro_pro: 120,
+            macro_fat: 60,
+            macro_carb: 250,
+            taste_tags: [],
+          });
+        } catch {
+          return null;
+        }
+      })(),
+    ]);
 
-  return { ingredients, recommend };
+    return { ingredients, recommend };
+  } catch {
+    // 当任意请求失败时，返回回退数据，避免抛出到 Next.js 导致 500
+    return {
+      ingredients: {
+        ingredients: [],
+        total: 0,
+        page: 1,
+        page_size: 8,
+        total_pages: 0,
+      },
+      recommend: null,
+    };
+  }
 }
 
 export default async function Home() {

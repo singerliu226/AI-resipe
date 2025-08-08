@@ -38,6 +38,6 @@ COPY --from=base /src/apps/web/package.json ./package.json
 # 安装仅生产依赖
 RUN npm install -g pnpm@8 && pnpm install --prod --frozen-lockfile
 
-EXPOSE 8080
+EXPOSE 3000
 
-CMD ["pnpm", "start"] 
+CMD ["pnpm", "start", "-p", "3000"]

@@ -30,7 +30,8 @@ services:
       interval: 30s
   web:
     build:
-      context: apps/web
+      context: .
+      dockerfile: apps/web/Dockerfile
     envs:
       - name: NEXT_PUBLIC_API_BASE_URL
         value: ${ZEABUR_SERVICE_API_HOST}
@@ -41,4 +42,4 @@ services:
       - name: NEXT_PUBLIC_SUPABASE_ANON_KEY
         value: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     ports:
-      - 3000 
+      - 3000

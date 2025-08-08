@@ -89,22 +89,23 @@ export interface Recipe {
 /** 默认请求超时时间 (毫秒) */
 const DEFAULT_TIMEOUT = 10_000;
 
-/** 解析 API Base URL，优先运行时 env，其次编译时 */
+/** 解析 API Base URL
+ *  浏览器环境优先使用同源相对路径，通过 Next rewrites 代理到后端，避免将内网地址暴露给客户端。
+ */
 function getApiBaseUrl(): string {
-  // 多个可能的环境变量
+  // 浏览器端：若未显式提供 NEXT_PUBLIC_API_BASE_URL，则走同源（相对路径）
+  if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return "";
+  }
+
+  // Node/SSR 或显式提供 NEXT_PUBLIC_API_BASE_URL
   const baseEnv =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.ZEABUR_SERVICE_API_HOST ||
     process.env.API_BASE_URL;
 
   let base = baseEnv || "http://localhost:8000";
-
-  // 如果只给了 host:port 或 service 名称，没有协议，默认加 http://
-  if (!/^https?:\/\//.test(base)) {
-    base = `http://${base}`;
-  }
-
-  return base.replace(/\/$/, ""); // 移除尾部斜杠
+  if (!/^https?:\/\//.test(base)) base = `http://${base}`;
+  return base.replace(/\/$/, "");
 }
 
 /**
@@ -126,7 +127,9 @@ async function request<T = any>(
       (headers as Record<string, string>)["Content-Type"] = "application/json";
     }
 
-    const res = await fetch(`${getApiBaseUrl()}${path}`, {
+    const base = getApiBaseUrl();
+    const url = base ? `${base}${path}` : path; // 同源时直接相对路径
+    const res = await fetch(url, {
       ...rest,
       headers,
       signal: controller.signal,

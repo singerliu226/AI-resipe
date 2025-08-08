@@ -33,7 +33,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     envs:
-      - name: NEXT_PUBLIC_API_BASE_URL
+      - name: API_BASE_URL
         value: ${ZEABUR_SERVICE_API_HOST}
       - name: NEXT_DISABLE_ESLINT
         value: "1"

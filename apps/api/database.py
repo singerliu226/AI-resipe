@@ -4,6 +4,7 @@
 提供异步数据库操作接口
 """
 import os
+import csv
 from typing import Optional, AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
@@ -65,6 +66,104 @@ async def _maybe_seed_sqlite() -> None:
         ])
         await session.commit()
 
+async def _seed_from_csv_if_empty() -> None:
+    """当菜谱表为空时，尝试从 CSV 导入一批演示数据。
+
+    - 优先使用中文 `recipes_cn.csv`，否则使用英文 `recipes.csv`
+    - 为每个菜谱填充默认热量和三大营养素占比，满足非空约束
+    - 为每个菜谱关联一个通用食材，保证详情页可展示
+    """
+    from sqlalchemy import func
+
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    cn_csv = os.path.join(data_dir, "recipes_cn.csv")
+    en_csv = os.path.join(data_dir, "recipes.csv")
+    csv_path = cn_csv if os.path.exists(cn_csv) else (en_csv if os.path.exists(en_csv) else None)
+    if not csv_path:
+        return
+
+    async with AsyncSessionLocal() as session:
+        total = (await session.execute(select(func.count(Recipe.id)))).scalar() or 0
+        if total > 0:
+            return
+
+        # 准备通用食材
+        generic = (await session.execute(select(Ingredient).where(Ingredient.name == "示例食材"))).scalar_one_or_none()
+        if generic is None:
+            generic = Ingredient(name="示例食材", energyKcal=100.0, proteinG=5.0, fatG=3.0, carbG=12.0)
+            session.add(generic)
+            await session.flush()
+
+        # 读取前 50 条记录，字段差异：
+        # - 中文 CSV: id,name,url,category,ingredients,steps
+        # - 英文 CSV: id,name,category,area,instructions,thumbnail
+        # 由于模型需要热量与三大营养素，采用演示默认值（更接近普通家常餐）
+        DEFAULT_CAL = 420.0
+        DEFAULT_PRO = 25.0
+        DEFAULT_FAT = 12.0
+        DEFAULT_CARB = 55.0
+
+        added = 0
+        try:
+            with open(csv_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    name = row.get("name") or row.get("Name")
+                    if not name:
+                        continue
+                    cuisine = row.get("category") or row.get("area") or None
+
+                    recipe = Recipe(
+                        name=str(name)[:128],
+                        calories=DEFAULT_CAL,
+                        macroPro=DEFAULT_PRO,
+                        macroFat=DEFAULT_FAT,
+                        macroCarb=DEFAULT_CARB,
+                        cuisine=(str(cuisine)[:64] if cuisine else None),
+                    )
+                    session.add(recipe)
+                    await session.flush()
+
+                    # 关联 1 个通用食材，数量给个演示值
+                    session.add(
+                        RecipeIngredient(recipeId=recipe.id, ingredientId=generic.id, quantity=100.0)
+                    )
+
+                    added += 1
+                    if added >= 50:
+                        break
+
+            await session.commit()
+        except UnicodeDecodeError:
+            # 兼容 utf-8-sig
+            with open(csv_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    name = row.get("name") or row.get("Name")
+                    if not name:
+                        continue
+                    cuisine = row.get("category") or row.get("area") or None
+
+                    recipe = Recipe(
+                        name=str(name)[:128],
+                        calories=DEFAULT_CAL,
+                        macroPro=DEFAULT_PRO,
+                        macroFat=DEFAULT_FAT,
+                        macroCarb=DEFAULT_CARB,
+                        cuisine=(str(cuisine)[:64] if cuisine else None),
+                    )
+                    session.add(recipe)
+                    await session.flush()
+
+                    session.add(
+                        RecipeIngredient(recipeId=recipe.id, ingredientId=generic.id, quantity=100.0)
+                    )
+
+                    added += 1
+                    if added >= 50:
+                        break
+            await session.commit()
+
 async def init_models() -> None:
     """在应用启动阶段创建数据库表。
     若 PostgreSQL 连接失败，则自动回退到 SQLite，并继续启动（演示友好）。
@@ -85,11 +184,16 @@ async def init_models() -> None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-    if IS_SQLITE:
-        try:
-            await _maybe_seed_sqlite()
-        except Exception:
-            pass
+    # 无论何种数据库，若为空则尝试导入演示数据
+    try:
+        await _seed_from_csv_if_empty()
+    except Exception:
+        # SQLite 仍保留最小示例兜底
+        if IS_SQLITE:
+            try:
+                await _maybe_seed_sqlite()
+            except Exception:
+                pass
 
 class Base(DeclarativeBase):
     """SQLAlchemy Base类"""

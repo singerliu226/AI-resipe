@@ -30,14 +30,13 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# 复制构建后的 .next 目录等产物
+# 复制构建产物与依赖
 COPY --from=base /src/apps/web/.next ./.next
 COPY --from=base /src/apps/web/public ./public
 COPY --from=base /src/apps/web/package.json ./package.json
-
-# 安装仅生产依赖
-RUN npm install -g pnpm@8 && pnpm install --prod --frozen-lockfile
+COPY --from=base /src/apps/web/node_modules ./node_modules
 
 EXPOSE 3000
 
-CMD ["pnpm", "start", "-p", "3000"]
+# 直接使用 next 可执行文件启动，避免在运行阶段再次安装依赖
+CMD ["node", "node_modules/next/dist/bin/next", "start", "-p", "3000"]

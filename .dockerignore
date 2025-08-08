@@ -1,0 +1,29 @@
+# Ignore local & VCS metadata
+.git
+.gitignore
+.DS_Store
+
+# Python env & caches
+.venv
+**/__pycache__
+*.pyc
+apps/api/.venv
+apps/api/local.db
+
+# Logs
+*.log
+apps/api/uvicorn_demo.log
+apps/api/uvicorn_demo.pid
+
+# Node
+node_modules
+apps/web/node_modules
+apps/web/.next
+
+# Build caches
+.pnpm-store
+.turbo
+coverage
+
+# Vercel local
+.vercel

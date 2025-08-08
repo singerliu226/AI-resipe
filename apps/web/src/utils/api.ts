@@ -128,7 +128,9 @@ async function request<T = any>(
     }
 
     const base = getApiBaseUrl();
-    const url = base ? `${base}${path}` : path; // 同源时直接相对路径
+    // 优先通过 Next 服务器端代理，避免跨域与内网暴露
+    const candidate = path.startsWith("/api/") ? `/api/backend${path}` : path;
+    const url = base ? `${base}${candidate}` : candidate;
     const res = await fetch(url, {
       ...rest,
       headers,

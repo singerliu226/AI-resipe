@@ -1,3 +1,48 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.venv/
+venv/
+.python-version
+*.pyc
+*.pyo
+*.pyd
+*.pid
+*.log
+*.db
+
+# Local env
+.env
+*.env
+apps/api/env.local
+
+# App-specific
+apps/api/.venv/
+apps/api/local.db
+apps/api/uvicorn_demo.log
+apps/api/uvicorn_demo.pid
+
+# Node/Next.js
+node_modules/
+apps/web/node_modules/
+.next/
+dist/
+build/
+.turbo/
+.pnpm-store/
+pnpm-debug.log
+
+# Misc
+.vercel/
+coverage/
+*.swp
+*.swo
 node_modules
 node_modules
 node_modules

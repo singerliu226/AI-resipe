@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Depends, Path
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +13,7 @@ router = APIRouter()
 
 class RatingCreate(BaseModel):
     stars: int = Field(..., ge=1, le=5, description="星级 1-5")
-    comment: str | None = Field(None, max_length=300, description="可选评论")
+    comment: Optional[str] = Field(None, max_length=300, description="可选评论")
 
 class RatingResponse(BaseModel):
     success: bool
@@ -32,4 +34,4 @@ async def create_rating(
     )
     await db.execute(stmt)
     await db.commit()
-    return {"success": True} 
+    return {"success": True}

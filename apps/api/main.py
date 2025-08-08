@@ -11,19 +11,22 @@
 from __future__ import annotations
 
 import os
-import openai  # type: ignore
 from typing import List, Dict, Union
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import dspy  # type: ignore
-from dspy import LM  # type: ignore
 from dotenv import load_dotenv
 
 import csv
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
+
+# openai 库可选导入（仅当需要配置 OPENAI_API_BASE 时才真正使用）
+try:  # pragma: no cover - 依赖可选
+    import openai  # type: ignore
+except Exception:  # noqa: BLE001 - 容忍任何导入问题
+    openai = None  # type: ignore
 
 # 导入新的模块
 from database import close_db
@@ -39,77 +42,120 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "env.local"), ov
 load_dotenv(override=False)
 
 # -----------------------
-# DsPy 配置
+# LLM 提供者（惰性初始化，优先 DsPy，回退 OpenAI SDK）
 # -----------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE")
 
-# 兼容 DeepSeek 等 OpenAI 协议供应商
-if OPENAI_API_BASE:
-    # openai<1.0
-    if hasattr(openai, "api_base"):
-        openai.api_base = OPENAI_API_BASE  # type: ignore[attr-defined]
-    # openai>=1.0
-    if hasattr(openai, "base_url"):
-        openai.base_url = OPENAI_API_BASE  # type: ignore[attr-defined]
+_lm_infer = None  # type: ignore[var-annotated]
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("Environment variable OPENAI_API_KEY is required for DsPy.")
+def ensure_lm_configured() -> None:
+    """在首次需要时配置 LLM，避免应用启动阶段因缺少密钥失败。
 
-# 配置 LLM
-# 使用 dspy.LM 实例（LiteLLM Provider）。Model 名称需符合 litellm 语法，如 "openai/gpt-4o"。
-# 若使用 DeepSeek，仍以 openai/ 前缀，底层仅透传到 OPENAI_API_BASE。
+    优先尝试 dspy.LM；若 dspy 导入失败，则回退到 openai SDK。
+    """
+    global _lm_infer
+    if _lm_infer is not None:
+        return
 
-os.environ.setdefault("OPENAI_API_KEY", OPENAI_API_KEY)
-if OPENAI_API_BASE:
-    os.environ.setdefault("OPENAI_API_BASE", OPENAI_API_BASE)
+    api_key = os.getenv("OPENAI_API_KEY") or OPENAI_API_KEY
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY 未配置，无法生成 AI 解释")
 
-lm_instance = LM("deepseek/deepseek-chat", temperature=0.7, max_tokens=512)
-dspy.settings.configure(lm=lm_instance)
+    os.environ.setdefault("OPENAI_API_KEY", api_key)
 
-# Define a simple module for explanation generation
-class ExplainModule(dspy.Module):
-    """根据菜谱与用户画像生成解释文本"""
+    if OPENAI_API_BASE:
+        os.environ.setdefault("OPENAI_API_BASE", OPENAI_API_BASE)
+        if openai is not None:
+            # openai<1.0
+            if hasattr(openai, "api_base"):
+                try:
+                    openai.api_base = OPENAI_API_BASE  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            # openai>=1.0
+            if hasattr(openai, "base_url"):
+                try:
+                    openai.base_url = OPENAI_API_BASE  # type: ignore[attr-defined]
+                except Exception:
+                    pass
 
-    def __init__(self):
-        super().__init__()
+    # 尝试 dspy
+    try:
+        import dspy  # type: ignore
+        from dspy import LM  # type: ignore
 
-        # 使用 Predict 创建带指令的 Signature
-        instructions = (
-            "你是一名注册营养师，请严格只用中文回答。"
-            "请依据 `user_profile` 和 `recipes`，输出 3 段，每段以数字+顿号开头：\n"
-            "1、热量与宏量营养素概述；\n"
-            "2、推荐理由；\n"
-            "3、注意事项；\n"
-            "总字数 60~120 字，任何情况下禁止出现英文单词或拼音。"
-        )
-        self.explain = dspy.Predict(
-            "user_profile, recipes -> explanation", instructions=instructions
-        )
+        model_name = os.getenv("DSPY_MODEL", "deepseek/deepseek-chat")
+        lm_instance = LM(model_name, temperature=0.7, max_tokens=512)
+        def _infer_with_dspy(prompt: str) -> str:
+            return lm_instance(prompt)[0].strip()
 
-    def forward(self, user_profile: str, recipes: str):  # type: ignore[override]
-        lm = dspy.settings.lm  # 当前注册的 LM
+        _lm_infer = _infer_with_dspy
+        return
+    except Exception:
+        # 回退 openai SDK
+        pass
 
-        # 构造中文 prompt
-        prompt_text = (
-            "你是一名注册营养师，请严格只用中文回答。\n"
-            "请依据以下信息生成 60-120 字、三行格式的推荐解释：\n"
-            "1、热量与宏量营养素概述；\n"
-            "2、推荐理由；\n"
-            "3、注意事项。\n\n"
-            f"用户画像: {user_profile}\n"
-            f"推荐菜谱: {recipes}\n"
-            "禁止使用任何英文单词或拼音。"
-        )
+    if openai is None:
+        raise HTTPException(status_code=503, detail="未安装 openai/dspy，无法生成 AI 解释")
 
-        print("PROMPT=>", prompt_text)  # 调试输出
+    # openai>=1.0 优先
+    if hasattr(openai, "OpenAI"):
+        try:
+            Client = openai.OpenAI  # type: ignore[attr-defined]
+            client = Client(api_key=os.environ["OPENAI_API_KEY"], base_url=os.getenv("OPENAI_API_BASE"))
+            model = os.getenv("OPENAI_MODEL", os.getenv("DSPY_MODEL", "gpt-4o"))
+            def _infer_with_openai_v1(prompt: str) -> str:
+                chat = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=512,
+                )
+                return (chat.choices[0].message.content or "").strip()
+            _lm_infer = _infer_with_openai_v1
+            return
+        except Exception:
+            pass
 
-        # 调用大模型
-        response = lm(prompt_text)[0]
-        return response.strip()
+    # openai<1.0 兼容
+    if hasattr(openai, "ChatCompletion"):
+        try:
+            def _infer_with_openai_legacy(prompt: str) -> str:
+                resp = openai.ChatCompletion.create(
+                    model=os.getenv("OPENAI_MODEL", os.getenv("DSPY_MODEL", "gpt-3.5-turbo")),
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=512,
+                )
+                return resp["choices"][0]["message"]["content"].strip()
+            _lm_infer = _infer_with_openai_legacy
+            return
+        except Exception:
+            pass
 
+    raise HTTPException(status_code=503, detail="LLM 初始化失败，请检查依赖与密钥配置")
 
-explain_module = ExplainModule()
+def generate_explanation(user_profile: str, recipes: str) -> str:
+    """基于 LLM 生成中文解释。
+
+    不依赖 dspy.Module，避免导入期依赖冲突；在函数内部统一构造 prompt 并调用 `_lm_infer`。
+    """
+    ensure_lm_configured()
+
+    prompt_text = (
+        "你是一名注册营养师，请严格只用中文回答。\n"
+        "请依据以下信息生成 60-120 字、三行格式的推荐解释：\n"
+        "1、热量与宏量营养素概述；\n"
+        "2、推荐理由；\n"
+        "3、注意事项。\n\n"
+        f"用户画像: {user_profile}\n"
+        f"推荐菜谱: {recipes}\n"
+        "禁止使用任何英文单词或拼音。"
+    )
+
+    print("PROMPT=>", prompt_text)
+    return _lm_infer(prompt_text)  # type: ignore[misc]
 
 # -----------------------
 # FastAPI 生命周期管理
@@ -136,10 +182,10 @@ app = FastAPI(
 # 允许本地前端跨域
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],  # 演示与部署环境允许任意来源访问
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 
@@ -165,7 +211,7 @@ async def explain(req: ExplainRequest):
     try:
         user_str = ", ".join([f"{k}:{v}" for k, v in req.user_profile.items()])
         recipe_str = "; ".join([f"{r.name}({r.calories}kcal)" for r in req.recipes])
-        result = explain_module(user_profile=user_str, recipes=recipe_str)
+        result = generate_explanation(user_profile=user_str, recipes=recipe_str)
         return {"explanation": result}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

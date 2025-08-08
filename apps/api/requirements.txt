@@ -3,4 +3,6 @@ uvicorn[standard]==0.29.0
 dspy-ai==2.6.2
 python-dotenv==1.0.1 
 sqlalchemy==2.0.23
-psycopg[binary]==3.2.3 
+psycopg[binary]==3.2.9
+openai>=1.0.0
+aiosqlite>=0.20.0

@@ -8,7 +8,7 @@ from __future__ import annotations
 """
 
 import math
-from typing import Optional, List
+from typing import Optional, List, Optional as TypingOptional
 from fastapi import APIRouter, HTTPException, Query, Depends, Path
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,7 +98,7 @@ async def get_recipe(
             .where(Recipe.id == recipe_id)
         )
         result = await db.execute(stmt)
-        recipe: Recipe | None = result.scalar_one_or_none()
+        recipe: TypingOptional[Recipe] = result.scalar_one_or_none()
         if recipe is None:
             raise HTTPException(status_code=404, detail="菜谱不存在")
 

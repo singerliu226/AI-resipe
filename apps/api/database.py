@@ -7,34 +7,89 @@ import os
 from typing import Optional, AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy import select
 from dotenv import load_dotenv
 
 # 加载环境变量
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "env.local"), override=False)
 load_dotenv(override=False)
 
-# 获取数据库URL并转换为异步版本
+# 获取数据库URL，默认降级至本地 SQLite，确保演示可用
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable is required")
+    # 本地演示默认 SQLite 数据库
+    default_sqlite_path = os.path.join(os.path.dirname(__file__), "local.db")
+    DATABASE_URL = f"sqlite:///{default_sqlite_path}"
 
-# 将postgresql://转换为postgresql+psycopg://并移除schema参数
-ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://")
-# 移除psycopg不支持的schema参数
-if "?schema=" in ASYNC_DATABASE_URL:
-    ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.split("?schema=")[0]
+IS_SQLITE = DATABASE_URL.startswith("sqlite://")
+
+if IS_SQLITE:
+    # 异步 SQLite 驱动
+    ASYNC_DATABASE_URL = DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
+else:
+    # 将postgresql://转换为postgresql+psycopg://并移除schema参数
+    ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://")
+    if "?schema=" in ASYNC_DATABASE_URL:
+        ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.split("?schema=")[0]
 
 # 创建异步引擎
-engine = create_async_engine(ASYNC_DATABASE_URL, echo=False)
+kwargs = {"echo": False}
+if IS_SQLITE:
+    kwargs["connect_args"] = {"check_same_thread": False}
+engine = create_async_engine(ASYNC_DATABASE_URL, **kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # 提供显式初始化函数，避免在导入时阻塞事件循环（解决 uvicorn reload 冲突）
+from sqlalchemy.exc import OperationalError
+
+async def _maybe_seed_sqlite() -> None:
+    """SQLite 空库时自动注入演示数据。"""
+    from sqlalchemy import func
+    async with AsyncSessionLocal() as session:
+        total = (await session.execute(select(func.count(Recipe.id)))).scalar() or 0
+        if total > 0:
+            return
+        ing_apple = Ingredient(name="苹果", energyKcal=52, proteinG=0.3, fatG=0.2, carbG=14.0)
+        ing_chicken = Ingredient(name="鸡胸肉", energyKcal=165, proteinG=31.0, fatG=3.6, carbG=0.0)
+        session.add_all([ing_apple, ing_chicken])
+        await session.flush()
+        r1 = Recipe(name="鸡胸肉三明治", calories=360, macroPro=35, macroFat=8, macroCarb=35, cuisine="Western")
+        r2 = Recipe(name="苹果燕麦粥", calories=280, macroPro=8, macroFat=6, macroCarb=50, cuisine="Chinese")
+        session.add_all([r1, r2])
+        await session.flush()
+        session.add_all([
+            RecipeIngredient(recipeId=r1.id, ingredientId=ing_chicken.id, quantity=150.0),
+            RecipeIngredient(recipeId=r2.id, ingredientId=ing_apple.id, quantity=120.0),
+        ])
+        await session.commit()
+
 async def init_models() -> None:
-    """在应用启动阶段创建数据库表（仅开发环境使用）"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """在应用启动阶段创建数据库表。
+    若 PostgreSQL 连接失败，则自动回退到 SQLite，并继续启动（演示友好）。
+    """
+    global engine, AsyncSessionLocal, IS_SQLITE, ASYNC_DATABASE_URL
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except OperationalError:
+        # 回退到 SQLite
+        default_sqlite_path = os.path.join(os.path.dirname(__file__), "local.db")
+        DATABASE_URL_FALLBACK = f"sqlite:///{default_sqlite_path}"
+        ASYNC_DATABASE_URL = DATABASE_URL_FALLBACK.replace("sqlite://", "sqlite+aiosqlite://")
+        IS_SQLITE = True
+        kwargs = {"echo": False, "connect_args": {"check_same_thread": False}}
+        engine = create_async_engine(ASYNC_DATABASE_URL, **kwargs)
+        AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    if IS_SQLITE:
+        try:
+            await _maybe_seed_sqlite()
+        except Exception:
+            pass
 
 class Base(DeclarativeBase):
     """SQLAlchemy Base类"""
